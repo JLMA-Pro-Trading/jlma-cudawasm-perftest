@@ -1,0 +1,542 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>🧪 Test Suite - CUDA-WASM vs WebGPU</title>
+    <style>
+        body { font-family: monospace; padding: 20px; background: #1a1a1a; color: #00ff00; }
+        .test-section { margin: 20px 0; padding: 15px; border: 1px solid #333; background: #222; }
+        .result { margin: 10px 0; padding: 10px; background: #333; }
+        .success { border-left: 4px solid #00ff00; }
+        .error { border-left: 4px solid #ff0000; }
+        .warning { border-left: 4px solid #ffaa00; }
+        .info { border-left: 4px solid #0099ff; }
+        button { padding: 10px 20px; margin: 5px; background: #333; color: #00ff00; border: 1px solid #555; cursor: pointer; }
+        button:hover { background: #444; }
+        .metrics { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 10px; }
+        .metric { padding: 10px; background: #2a2a2a; border-left: 3px solid #00ff00; }
+    </style>
+</head>
+<body>
+    <h1>🧪 Suite de Pruebas - Benchmarks Reales</h1>
+    
+    <div class="test-section">
+        <h2>📊 Estado del Sistema</h2>
+        <div id="systemStatus" class="result info">Verificando compatibilidad...</div>
+        <button onclick="checkSystem()">🔍 Verificar Sistema</button>
+    </div>
+
+    <div class="test-section">
+        <h2>⚡ Benchmarks Básicos</h2>
+        <button onclick="testVectorAdd()">➕ Vector Addition</button>
+        <button onclick="testMatrixMult()">✖️ Matrix Multiplication</button>
+        <div id="basicResults" class="result"></div>
+    </div>
+
+    <div class="test-section">
+        <h2>🔬 Benchmarks Avanzados</h2>
+        <button onclick="testNeuralNetwork()">🧠 Neural Network</button>
+        <button onclick="testMonteCarlo()">🎲 Monte Carlo</button>
+        <button onclick="testCryptography()">🔐 SHA-256</button>
+        <button onclick="testMemoryBandwidth()">💾 Memory Bandwidth</button>
+        <div id="advancedResults" class="result"></div>
+    </div>
+
+    <div class="test-section">
+        <h2>📈 Análisis de Rendimiento</h2>
+        <button onclick="runFullSuite()">🚀 Suite Completa</button>
+        <div id="performanceResults" class="result"></div>
+    </div>
+
+    <script type="module">
+        import { WebGPUComputer } from './src/webgpu.js';
+        import { CudaWasmComputer } from './src/cuda-wasm.js';
+
+        const webgpu = new WebGPUComputer();
+        const cudaWasm = new CudaWasmComputer();
+
+        window.webgpu = webgpu;
+        window.cudaWasm = cudaWasm;
+
+        function log(message, type = 'info') {
+            console.log(`[${type.toUpperCase()}] ${message}`);
+        }
+
+        function displayResult(elementId, content, type = 'info') {
+            const element = document.getElementById(elementId);
+            element.innerHTML = content;
+            element.className = `result ${type}`;
+        }
+
+        // Sistema de verificación
+        window.checkSystem = async function() {
+            displayResult('systemStatus', '🔍 Verificando sistema...', 'info');
+            
+            const checks = {
+                webgpu: navigator.gpu ? '✅' : '❌',
+                webassembly: typeof WebAssembly !== 'undefined' ? '✅' : '❌',
+                crypto: typeof crypto !== 'undefined' && crypto.subtle ? '✅' : '❌',
+                performance: typeof performance !== 'undefined' ? '✅' : '❌'
+            };
+
+            let webgpuInfo = 'No disponible';
+            if (navigator.gpu) {
+                try {
+                    const adapter = await navigator.gpu.requestAdapter();
+                    if (adapter) {
+                        const info = await adapter.requestAdapterInfo?.();
+                        webgpuInfo = info?.description || 'WebGPU disponible';
+                    }
+                } catch (e) {
+                    webgpuInfo = 'Error al obtener info WebGPU';
+                }
+            }
+
+            const html = `
+                <div class="metrics">
+                    <div class="metric">WebGPU: ${checks.webgpu}</div>
+                    <div class="metric">WebAssembly: ${checks.webassembly}</div>
+                    <div class="metric">WebCrypto: ${checks.crypto}</div>
+                    <div class="metric">Performance API: ${checks.performance}</div>
+                </div>
+                <p><strong>GPU:</strong> ${webgpuInfo}</p>
+                <p><strong>User Agent:</strong> ${navigator.userAgent.substring(0, 100)}...</p>
+            `;
+
+            displayResult('systemStatus', html, 'success');
+        };
+
+        // Test Vector Addition
+        window.testVectorAdd = async function() {
+            displayResult('basicResults', '➕ Probando Vector Addition...', 'info');
+            
+            const sizes = [1000, 10000, 100000];
+            const results = [];
+            
+            for (const size of sizes) {
+                const a = new Float32Array(size).fill(1.5);
+                const b = new Float32Array(size).fill(2.5);
+                
+                // WebGPU
+                let webgpuTime = 'Error';
+                try {
+                    const start = performance.now();
+                    const webgpuResult = await webgpu.vectorAdd(a, b, 3);
+                    webgpuTime = webgpuResult.averageTime.toFixed(2) + 'ms';
+                    
+                    // Verificar resultado
+                    const expected = 4.0;
+                    const actual = webgpuResult.result[0];
+                    if (Math.abs(actual - expected) > 0.001) {
+                        webgpuTime += ` ⚠️ (resultado: ${actual}, esperado: ${expected})`;
+                    }
+                } catch (e) {
+                    webgpuTime = `Error: ${e.message}`;
+                }
+                
+                // CUDA-WASM
+                let cudaTime = 'Error';
+                try {
+                    const cudaResult = await cudaWasm.vectorAdd(a, b, 3);
+                    cudaTime = cudaResult.averageTime.toFixed(2) + 'ms';
+                    
+                    // Verificar resultado
+                    const expected = 4.0;
+                    const actual = cudaResult.result[0];
+                    if (Math.abs(actual - expected) > 0.001) {
+                        cudaTime += ` ⚠️ (resultado: ${actual}, esperado: ${expected})`;
+                    }
+                } catch (e) {
+                    cudaTime = `Error: ${e.message}`;
+                }
+                
+                results.push({ size, webgpu: webgpuTime, cudaWasm: cudaTime });
+            }
+            
+            const html = `
+                <h3>📊 Resultados Vector Addition</h3>
+                <div class="metrics">
+                    ${results.map(r => `
+                        <div class="metric">
+                            <strong>${r.size} elementos</strong><br>
+                            WebGPU: ${r.webgpu}<br>
+                            CUDA-WASM: ${r.cudaWasm}
+                        </div>
+                    `).join('')}
+                </div>
+            `;
+            
+            displayResult('basicResults', html, 'success');
+        };
+
+        // Test Matrix Multiplication
+        window.testMatrixMult = async function() {
+            displayResult('basicResults', '✖️ Probando Matrix Multiplication...', 'info');
+            
+            const size = 64; // 64x64 matrix (safer size to prevent crashes)
+            const matrixA = new Float32Array(size * size);
+            const matrixB = new Float32Array(size * size);
+            
+            // Initialize matrices
+            for (let i = 0; i < size * size; i++) {
+                matrixA[i] = 1.0;
+                matrixB[i] = 2.0;
+            }
+            
+            const results = [];
+            
+            // WebGPU
+            try {
+                const webgpuResult = await webgpu.matrixMultiply(matrixA, matrixB, size, 3);
+                results.push({
+                    method: 'WebGPU',
+                    time: webgpuResult.averageTime.toFixed(2) + 'ms',
+                    result: webgpuResult.result[0].toFixed(2) // Should be 256.0 (128 * 1 * 2)
+                });
+            } catch (e) {
+                results.push({
+                    method: 'WebGPU',
+                    time: `Error: ${e.message}`,
+                    result: 'N/A'
+                });
+            }
+            
+            // CUDA-WASM
+            try {
+                const cudaResult = await cudaWasm.matrixMultiply(matrixA, matrixB, size, 3);
+                results.push({
+                    method: 'CUDA-WASM',
+                    time: cudaResult.averageTime.toFixed(2) + 'ms',
+                    result: cudaResult.result[0].toFixed(2)
+                });
+            } catch (e) {
+                results.push({
+                    method: 'CUDA-WASM',
+                    time: `Error: ${e.message}`,
+                    result: 'N/A'
+                });
+            }
+            
+            const html = `
+                <h3>🔢 Resultados Matrix Multiplication (${size}x${size})</h3>
+                <div class="metrics">
+                    ${results.map(r => `
+                        <div class="metric">
+                            <strong>${r.method}</strong><br>
+                            Tiempo: ${r.time}<br>
+                            Resultado[0]: ${r.result}
+                        </div>
+                    `).join('')}
+                </div>
+            `;
+            
+            displayResult('basicResults', html, 'success');
+        };
+
+        // Test Neural Network
+        window.testNeuralNetwork = async function() {
+            displayResult('advancedResults', '🧠 Probando Neural Network...', 'info');
+            
+            const inputSize = 784;
+            const hiddenSize = 128;
+            const outputSize = 10;
+            
+            const input = new Float32Array(inputSize);
+            const weights1 = new Float32Array(inputSize * hiddenSize);
+            const bias1 = new Float32Array(hiddenSize);
+            const weights2 = new Float32Array(hiddenSize * outputSize);
+            const bias2 = new Float32Array(outputSize);
+            
+            // Initialize with small random values
+            for (let i = 0; i < input.length; i++) input[i] = 0.1 * i / inputSize;
+            for (let i = 0; i < weights1.length; i++) weights1[i] = 0.01;
+            for (let i = 0; i < weights2.length; i++) weights2[i] = 0.01;
+            for (let i = 0; i < bias1.length; i++) bias1[i] = 0.1;
+            for (let i = 0; i < bias2.length; i++) bias2[i] = 0.1;
+            
+            const results = [];
+            
+            // WebGPU
+            try {
+                const start = performance.now();
+                const webgpuOutput = await webgpu.denseLayerInference(input, weights1, bias1, weights2, bias2);
+                const end = performance.now();
+                results.push({
+                    method: 'WebGPU',
+                    time: (end - start).toFixed(2) + 'ms',
+                    output: webgpuOutput.slice(0, 3).map(x => x.toFixed(3)).join(', ')
+                });
+            } catch (e) {
+                results.push({
+                    method: 'WebGPU',
+                    time: `Error: ${e.message}`,
+                    output: 'N/A'
+                });
+            }
+            
+            // CUDA-WASM
+            try {
+                const start = performance.now();
+                const cudaOutput = await cudaWasm.denseLayerInference(input, weights1, bias1, weights2, bias2);
+                const end = performance.now();
+                results.push({
+                    method: 'CUDA-WASM',
+                    time: (end - start).toFixed(2) + 'ms',
+                    output: cudaOutput.slice(0, 3).map(x => x.toFixed(3)).join(', ')
+                });
+            } catch (e) {
+                results.push({
+                    method: 'CUDA-WASM',
+                    time: `Error: ${e.message}`,
+                    output: 'N/A'
+                });
+            }
+            
+            const html = `
+                <h3>🤖 Neural Network (784→128→10)</h3>
+                <div class="metrics">
+                    ${results.map(r => `
+                        <div class="metric">
+                            <strong>${r.method}</strong><br>
+                            Tiempo: ${r.time}<br>
+                            Salida[0-2]: ${r.output}
+                        </div>
+                    `).join('')}
+                </div>
+            `;
+            
+            displayResult('advancedResults', html, 'success');
+        };
+
+        // Test Monte Carlo
+        window.testMonteCarlo = async function() {
+            displayResult('advancedResults', '🎲 Probando Monte Carlo...', 'info');
+            
+            const samples = 100000;
+            const results = [];
+            
+            // WebGPU
+            try {
+                const start = performance.now();
+                const webgpuPi = await webgpu.monteCarloPi(samples);
+                const end = performance.now();
+                results.push({
+                    method: 'WebGPU',
+                    time: (end - start).toFixed(2) + 'ms',
+                    pi: webgpuPi.toFixed(6),
+                    error: Math.abs(webgpuPi - Math.PI).toFixed(6)
+                });
+            } catch (e) {
+                results.push({
+                    method: 'WebGPU',
+                    time: `Error: ${e.message}`,
+                    pi: 'N/A',
+                    error: 'N/A'
+                });
+            }
+            
+            // CUDA-WASM
+            try {
+                const start = performance.now();
+                const cudaPi = await cudaWasm.monteCarloPi(samples);
+                const end = performance.now();
+                results.push({
+                    method: 'CUDA-WASM',
+                    time: (end - start).toFixed(2) + 'ms',
+                    pi: cudaPi.toFixed(6),
+                    error: Math.abs(cudaPi - Math.PI).toFixed(6)
+                });
+            } catch (e) {
+                results.push({
+                    method: 'CUDA-WASM',
+                    time: `Error: ${e.message}`,
+                    pi: 'N/A',
+                    error: 'N/A'
+                });
+            }
+            
+            const html = `
+                <h3>🎯 Monte Carlo Pi (${samples} muestras)</h3>
+                <p><strong>π real:</strong> ${Math.PI.toFixed(6)}</p>
+                <div class="metrics">
+                    ${results.map(r => `
+                        <div class="metric">
+                            <strong>${r.method}</strong><br>
+                            Tiempo: ${r.time}<br>
+                            π estimado: ${r.pi}<br>
+                            Error: ${r.error}
+                        </div>
+                    `).join('')}
+                </div>
+            `;
+            
+            displayResult('advancedResults', html, 'success');
+        };
+
+        // Test Cryptography
+        window.testCryptography = async function() {
+            displayResult('advancedResults', '🔐 Probando SHA-256...', 'info');
+            
+            const data = new Uint32Array(1000);
+            for (let i = 0; i < data.length; i++) {
+                data[i] = i * 123456;
+            }
+            
+            const results = [];
+            
+            // WebGPU
+            try {
+                const start = performance.now();
+                const webgpuHash = await webgpu.sha256Batch(data);
+                const end = performance.now();
+                results.push({
+                    method: 'WebGPU',
+                    time: (end - start).toFixed(2) + 'ms',
+                    hashSize: webgpuHash.length,
+                    throughput: (data.length / ((end - start) / 1000)).toFixed(0) + ' hashes/sec'
+                });
+            } catch (e) {
+                results.push({
+                    method: 'WebGPU',
+                    time: `Error: ${e.message}`,
+                    hashSize: 'N/A',
+                    throughput: 'N/A'
+                });
+            }
+            
+            // CUDA-WASM
+            try {
+                const start = performance.now();
+                const cudaHash = await cudaWasm.sha256Batch(data);
+                const end = performance.now();
+                results.push({
+                    method: 'CUDA-WASM',
+                    time: (end - start).toFixed(2) + 'ms',
+                    hashSize: cudaHash.length,
+                    throughput: (data.length / ((end - start) / 1000)).toFixed(0) + ' hashes/sec'
+                });
+            } catch (e) {
+                results.push({
+                    method: 'CUDA-WASM',
+                    time: `Error: ${e.message}`,
+                    hashSize: 'N/A',
+                    throughput: 'N/A'
+                });
+            }
+            
+            const html = `
+                <h3>🔒 SHA-256 Batch (${data.length} elementos)</h3>
+                <div class="metrics">
+                    ${results.map(r => `
+                        <div class="metric">
+                            <strong>${r.method}</strong><br>
+                            Tiempo: ${r.time}<br>
+                            Hash size: ${r.hashSize} bytes<br>
+                            Throughput: ${r.throughput}
+                        </div>
+                    `).join('')}
+                </div>
+            `;
+            
+            displayResult('advancedResults', html, 'success');
+        };
+
+        // Memory Bandwidth Test
+        window.testMemoryBandwidth = async function() {
+            displayResult('advancedResults', '💾 Probando Memory Bandwidth...', 'info');
+            
+            const size = 1000000;
+            const data = new Float32Array(size);
+            for (let i = 0; i < size; i++) {
+                data[i] = i * 0.001;
+            }
+            
+            const results = [];
+            
+            // Test copying data multiple times
+            const iterations = 10;
+            
+            // WebGPU (using vectorAdd as memory bandwidth proxy)
+            try {
+                const b = new Float32Array(size).fill(0);
+                const start = performance.now();
+                await webgpu.vectorAdd(data, b, iterations);
+                const end = performance.now();
+                
+                const totalBytes = size * 4 * 3 * iterations; // A, B, C arrays
+                const bandwidth = (totalBytes / ((end - start) / 1000)) / (1024 * 1024 * 1024);
+                
+                results.push({
+                    method: 'WebGPU',
+                    time: (end - start).toFixed(2) + 'ms',
+                    bandwidth: bandwidth.toFixed(2) + ' GB/s'
+                });
+            } catch (e) {
+                results.push({
+                    method: 'WebGPU',
+                    time: `Error: ${e.message}`,
+                    bandwidth: 'N/A'
+                });
+            }
+            
+            // CUDA-WASM
+            try {
+                const b = new Float32Array(size).fill(0);
+                const start = performance.now();
+                await cudaWasm.vectorAdd(data, b, iterations);
+                const end = performance.now();
+                
+                const totalBytes = size * 4 * 3 * iterations;
+                const bandwidth = (totalBytes / ((end - start) / 1000)) / (1024 * 1024 * 1024);
+                
+                results.push({
+                    method: 'CUDA-WASM',
+                    time: (end - start).toFixed(2) + 'ms',
+                    bandwidth: bandwidth.toFixed(2) + ' GB/s'
+                });
+            } catch (e) {
+                results.push({
+                    method: 'CUDA-WASM',
+                    time: `Error: ${e.message}`,
+                    bandwidth: 'N/A'
+                });
+            }
+            
+            const html = `
+                <h3>💾 Memory Bandwidth (${size} elementos, ${iterations} iteraciones)</h3>
+                <div class="metrics">
+                    ${results.map(r => `
+                        <div class="metric">
+                            <strong>${r.method}</strong><br>
+                            Tiempo: ${r.time}<br>
+                            Bandwidth: ${r.bandwidth}
+                        </div>
+                    `).join('')}
+                </div>
+            `;
+            
+            displayResult('advancedResults', html, 'success');
+        };
+
+        // Run full suite
+        window.runFullSuite = async function() {
+            displayResult('performanceResults', '🚀 Ejecutando suite completa...', 'info');
+            
+            await checkSystem();
+            await testVectorAdd();
+            await testMatrixMult();
+            await testNeuralNetwork();
+            await testMonteCarlo();
+            await testCryptography();
+            await testMemoryBandwidth();
+            
+            displayResult('performanceResults', '✅ Suite completa ejecutada. Revisa los resultados arriba.', 'success');
+        };
+
+        // Auto-run system check on load
+        document.addEventListener('DOMContentLoaded', function() {
+            console.log('🧪 Test Suite cargado');
+            setTimeout(checkSystem, 1000);
+        });
+    </script>
+</body>
+</html>

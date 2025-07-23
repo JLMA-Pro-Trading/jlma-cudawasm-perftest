@@ -1,0 +1,318 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>📈 Scalability Analysis - CUDA-WASM vs WebGPU</title>
+    <style>
+        body { font-family: monospace; padding: 20px; background: #0d1117; color: #c9d1d9; }
+        .container { max-width: 1200px; margin: 0 auto; }
+        .test-section { margin: 20px 0; padding: 20px; border: 1px solid #30363d; background: #161b22; border-radius: 8px; }
+        .result { margin: 10px 0; padding: 15px; background: #21262d; border-radius: 6px; }
+        .success { border-left: 4px solid #238636; }
+        .warning { border-left: 4px solid #f85149; }
+        .info { border-left: 4px solid #1f6feb; }
+        button { padding: 12px 24px; margin: 8px; background: #238636; color: white; border: none; border-radius: 6px; cursor: pointer; font-family: monospace; }
+        button:hover { background: #2ea043; }
+        button:disabled { background: #484f58; cursor: not-allowed; }
+        .metrics { display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 15px; margin: 20px 0; }
+        .metric { padding: 15px; background: #0d1117; border: 1px solid #30363d; border-radius: 6px; }
+        .chart { background: #161b22; padding: 20px; margin: 20px 0; border-radius: 8px; border: 1px solid #30363d; }
+        .progress { width: 100%; height: 8px; background: #21262d; border-radius: 4px; margin: 10px 0; overflow: hidden; }
+        .progress-bar { height: 100%; background: linear-gradient(90deg, #1f6feb, #238636); width: 0%; transition: width 0.3s; }
+        table { width: 100%; border-collapse: collapse; margin: 20px 0; }
+        th, td { padding: 12px; text-align: left; border-bottom: 1px solid #30363d; }
+        th { background: #21262d; font-weight: bold; }
+        .number { text-align: right; font-family: 'SF Mono', Monaco, monospace; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>📈 Análisis de Escalabilidad - CUDA-WASM vs WebGPU</h1>
+        
+        <div class="test-section">
+            <h2>🎯 Configuración del Test</h2>
+            <p>Este test ejecuta benchmarks con diferentes tamaños para analizar cómo escalan las tecnologías.</p>
+            
+            <label>
+                <strong>Tipo de Benchmark:</strong>
+                <select id="benchmarkType">
+                    <option value="vectorAdd">Vector Addition</option>
+                    <option value="matrixMult">Matrix Multiplication</option>
+                    <option value="neuralNetwork">Neural Network</option>
+                    <option value="monteCarlo">Monte Carlo</option>
+                </select>
+            </label>
+            
+            <br><br>
+            
+            <button onclick="runScalabilityTest()">🚀 Ejecutar Test de Escalabilidad</button>
+            <button onclick="clearResults()">🗑️ Limpiar Resultados</button>
+            
+            <div class="progress">
+                <div id="progressBar" class="progress-bar"></div>
+            </div>
+            <div id="status" class="result info">Listo para ejecutar test de escalabilidad</div>
+        </div>
+
+        <div class="test-section">
+            <h2>📊 Resultados</h2>
+            <div id="resultsContainer"></div>
+        </div>
+
+        <div class="test-section">
+            <h2>📈 Análisis</h2>
+            <div id="analysisContainer"></div>
+        </div>
+    </div>
+
+    <script type="module">
+        import { WebGPUComputer } from './src/webgpu.js';
+        import { CudaWasmComputer } from './src/cuda-wasm.js';
+
+        const webgpu = new WebGPUComputer();
+        const cudaWasm = new CudaWasmComputer();
+
+        let testResults = [];
+
+        function updateProgress(percent) {
+            document.getElementById('progressBar').style.width = `${percent}%`;
+        }
+
+        function updateStatus(message) {
+            document.getElementById('status').innerHTML = `<div class="result info">${message}</div>`;
+        }
+
+        function displayResults(results) {
+            const container = document.getElementById('resultsContainer');
+            
+            const html = `
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Tamaño</th>
+                            <th>WebGPU (ms)</th>
+                            <th>CUDA-WASM (ms)</th>
+                            <th>Speedup</th>
+                            <th>Winner</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        ${results.map(r => {
+                            const webgpuTime = r.webgpu.error ? 'Error' : r.webgpu.time.toFixed(2);
+                            const cudaTime = r.cudaWasm.error ? 'Error' : r.cudaWasm.time.toFixed(2);
+                            
+                            let speedup = 'N/A';
+                            let winner = 'N/A';
+                            
+                            if (!r.webgpu.error && !r.cudaWasm.error) {
+                                if (r.webgpu.time < r.cudaWasm.time) {
+                                    speedup = (r.cudaWasm.time / r.webgpu.time).toFixed(2) + 'x (WebGPU)';
+                                    winner = '🏆 WebGPU';
+                                } else {
+                                    speedup = (r.webgpu.time / r.cudaWasm.time).toFixed(2) + 'x (CUDA-WASM)';
+                                    winner = '🔥 CUDA-WASM';
+                                }
+                            }
+                            
+                            return `
+                                <tr>
+                                    <td>${r.size.toLocaleString()}</td>
+                                    <td class="number">${webgpuTime}</td>
+                                    <td class="number">${cudaTime}</td>
+                                    <td class="number">${speedup}</td>
+                                    <td>${winner}</td>
+                                </tr>
+                            `;
+                        }).join('')}
+                    </tbody>
+                </table>
+            `;
+            
+            container.innerHTML = html;
+        }
+
+        function analyzeResults(results) {
+            const container = document.getElementById('analysisContainer');
+            
+            // Calcular estadísticas
+            const validResults = results.filter(r => !r.webgpu.error && !r.cudaWasm.error);
+            
+            if (validResults.length === 0) {
+                container.innerHTML = '<div class="result warning">No hay resultados válidos para analizar</div>';
+                return;
+            }
+
+            const webgpuWins = validResults.filter(r => r.webgpu.time < r.cudaWasm.time).length;
+            const cudaWins = validResults.length - webgpuWins;
+            
+            const avgWebGPUTime = validResults.reduce((sum, r) => sum + r.webgpu.time, 0) / validResults.length;
+            const avgCUDATime = validResults.reduce((sum, r) => sum + r.cudaWasm.time, 0) / validResults.length;
+            
+            // Calcular tendencias de escalabilidad
+            let webgpuScaling = 'Linear';
+            let cudaScaling = 'Linear';
+            
+            if (validResults.length >= 3) {
+                const firstResult = validResults[0];
+                const lastResult = validResults[validResults.length - 1];
+                
+                const sizeRatio = lastResult.size / firstResult.size;
+                const webgpuTimeRatio = lastResult.webgpu.time / firstResult.webgpu.time;
+                const cudaTimeRatio = lastResult.cudaWasm.time / firstResult.cudaWasm.time;
+                
+                webgpuScaling = webgpuTimeRatio < sizeRatio ? 'Sub-linear (Good)' : 
+                               webgpuTimeRatio > sizeRatio * 1.5 ? 'Super-linear (Poor)' : 'Linear';
+                               
+                cudaScaling = cudaTimeRatio < sizeRatio ? 'Sub-linear (Good)' : 
+                             cudaTimeRatio > sizeRatio * 1.5 ? 'Super-linear (Poor)' : 'Linear';
+            }
+
+            const html = `
+                <div class="metrics">
+                    <div class="metric">
+                        <h3>🏆 Victorias</h3>
+                        <p>WebGPU: ${webgpuWins}/${validResults.length}</p>
+                        <p>CUDA-WASM: ${cudaWins}/${validResults.length}</p>
+                    </div>
+                    <div class="metric">
+                        <h3>⏱️ Tiempo Promedio</h3>
+                        <p>WebGPU: ${avgWebGPUTime.toFixed(2)} ms</p>
+                        <p>CUDA-WASM: ${avgCUDATime.toFixed(2)} ms</p>
+                    </div>
+                    <div class="metric">
+                        <h3>📈 Escalabilidad</h3>
+                        <p>WebGPU: ${webgpuScaling}</p>
+                        <p>CUDA-WASM: ${cudaScaling}</p>
+                    </div>
+                    <div class="metric">
+                        <h3>🎯 Recomendación</h3>
+                        <p>${webgpuWins > cudaWins ? 
+                            'WebGPU muestra mejor rendimiento general' : 
+                            'CUDA-WASM muestra mejor rendimiento general'}</p>
+                    </div>
+                </div>
+                
+                <div class="result info">
+                    <h3>📋 Observaciones:</h3>
+                    <ul>
+                        <li><strong>Conjunto de datos:</strong> ${validResults.length} tamaños probados</li>
+                        <li><strong>Rango:</strong> ${validResults[0]?.size.toLocaleString()} - ${validResults[validResults.length-1]?.size.toLocaleString()} elementos</li>
+                        <li><strong>Tendencia WebGPU:</strong> ${webgpuScaling}</li>
+                        <li><strong>Tendencia CUDA-WASM:</strong> ${cudaScaling}</li>
+                        <li><strong>Consistencia:</strong> ${validResults.length === results.length ? 'Sin errores' : `${results.length - validResults.length} errores detectados`}</li>
+                    </ul>
+                </div>
+            `;
+            
+            container.innerHTML = html;
+        }
+
+        window.runScalabilityTest = async function() {
+            const benchmarkType = document.getElementById('benchmarkType').value;
+            
+            updateStatus('🚀 Iniciando test de escalabilidad...');
+            updateProgress(0);
+            
+            testResults = [];
+            
+            // Definir tamaños a probar basado en el tipo de benchmark
+            let sizes = [];
+            
+            switch (benchmarkType) {
+                case 'vectorAdd':
+                    sizes = [1000, 5000, 10000, 50000, 100000, 500000, 1000000];
+                    break;
+                case 'matrixMult':
+                    sizes = [32, 64, 128, 256, 384]; // Safe matrix sizes (NxN) - 512 removed to prevent crashes
+                    break;
+                case 'neuralNetwork':
+                    sizes = [100, 300, 500, 784]; // Input sizes
+                    break;
+                case 'monteCarlo':
+                    sizes = [10000, 50000, 100000, 500000, 1000000];
+                    break;
+            }
+            
+            for (let i = 0; i < sizes.length; i++) {
+                const size = sizes[i];
+                const progress = ((i + 1) / sizes.length) * 100;
+                
+                updateStatus(`📊 Probando tamaño ${size.toLocaleString()} (${i + 1}/${sizes.length})`);
+                updateProgress(progress * 0.9); // Dejar 10% para análisis final
+                
+                const result = { size, webgpu: {}, cudaWasm: {} };
+                
+                try {
+                    // Test WebGPU
+                    const webgpuStart = performance.now();
+                    await runBenchmark('webgpu', benchmarkType, size);
+                    const webgpuEnd = performance.now();
+                    result.webgpu = { time: webgpuEnd - webgpuStart, error: false };
+                } catch (error) {
+                    result.webgpu = { error: error.message };
+                }
+                
+                try {
+                    // Test CUDA-WASM
+                    const cudaStart = performance.now();
+                    await runBenchmark('cudaWasm', benchmarkType, size);
+                    const cudaEnd = performance.now();
+                    result.cudaWasm = { time: cudaEnd - cudaStart, error: false };
+                } catch (error) {
+                    result.cudaWasm = { error: error.message };
+                }
+                
+                testResults.push(result);
+                
+                // Mostrar resultados parciales
+                displayResults(testResults);
+            }
+            
+            updateProgress(100);
+            updateStatus('✅ Test de escalabilidad completado');
+            
+            // Análisis final
+            analyzeResults(testResults);
+        };
+
+        async function runBenchmark(platform, type, size) {
+            const computer = platform === 'webgpu' ? webgpu : cudaWasm;
+            
+            switch (type) {
+                case 'vectorAdd':
+                    const a = new Float32Array(size).fill(1.5);
+                    const b = new Float32Array(size).fill(2.5);
+                    return await computer.vectorAdd(a, b, 1);
+                    
+                case 'matrixMult':
+                    const matrixA = new Float32Array(size * size).fill(1.0);
+                    const matrixB = new Float32Array(size * size).fill(2.0);
+                    return await computer.matrixMultiply(matrixA, matrixB, size, 1);
+                    
+                case 'neuralNetwork':
+                    const input = new Float32Array(size).fill(0.1);
+                    const weights1 = new Float32Array(size * 128).fill(0.01);
+                    const bias1 = new Float32Array(128).fill(0.1);
+                    const weights2 = new Float32Array(128 * 10).fill(0.01);
+                    const bias2 = new Float32Array(10).fill(0.1);
+                    return await computer.denseLayerInference(input, weights1, bias1, weights2, bias2);
+                    
+                case 'monteCarlo':
+                    return await computer.monteCarloPi(size);
+            }
+        }
+
+        window.clearResults = function() {
+            testResults = [];
+            document.getElementById('resultsContainer').innerHTML = '';
+            document.getElementById('analysisContainer').innerHTML = '';
+            updateProgress(0);
+            updateStatus('Resultados limpiados. Listo para nueva prueba.');
+        };
+
+        // Initialize
+        document.addEventListener('DOMContentLoaded', function() {
+            console.log('📈 Scalability Test Suite loaded');
+        });
+    </script>
+</body>
+</html>

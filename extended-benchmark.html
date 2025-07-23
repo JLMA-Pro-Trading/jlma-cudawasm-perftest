@@ -1,0 +1,885 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>🚀 CUDA-WASM vs WebGPU - Benchmark Completo</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 20px;
+            box-shadow: 0 20px 40px rgba(0,0,0,0.1);
+            overflow: hidden;
+        }
+
+        .header {
+            background: linear-gradient(135deg, #2c3e50 0%, #34495e 100%);
+            color: white;
+            padding: 30px;
+            text-align: center;
+        }
+
+        .header h1 {
+            font-size: 2.5em;
+            margin-bottom: 10px;
+        }
+
+        .header p {
+            font-size: 1.2em;
+            opacity: 0.9;
+        }
+
+        .nav-tabs {
+            display: flex;
+            background: #f8f9fa;
+            border-bottom: 1px solid #dee2e6;
+        }
+
+        .nav-tab {
+            flex: 1;
+            padding: 15px 20px;
+            background: none;
+            border: none;
+            cursor: pointer;
+            font-size: 16px;
+            font-weight: 500;
+            transition: all 0.3s ease;
+            border-bottom: 3px solid transparent;
+        }
+
+        .nav-tab:hover {
+            background: #e9ecef;
+        }
+
+        .nav-tab.active {
+            background: white;
+            border-bottom-color: #007bff;
+            color: #007bff;
+        }
+
+        .tab-content {
+            display: none;
+            padding: 30px;
+        }
+
+        .tab-content.active {
+            display: block;
+        }
+
+        .benchmark-controls {
+            background: #f8f9fa;
+            padding: 20px;
+            border-radius: 10px;
+            margin-bottom: 30px;
+        }
+
+        .control-group {
+            display: flex;
+            gap: 20px;
+            align-items: center;
+            flex-wrap: wrap;
+            margin-bottom: 15px;
+        }
+
+        .control-group label {
+            font-weight: 600;
+            min-width: 120px;
+        }
+
+        .control-group input, .control-group select {
+            padding: 8px 12px;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+            font-size: 14px;
+        }
+
+        .btn-group {
+            display: flex;
+            gap: 10px;
+            flex-wrap: wrap;
+        }
+
+        .btn {
+            padding: 12px 24px;
+            border: none;
+            border-radius: 8px;
+            font-size: 16px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        .btn-primary {
+            background: linear-gradient(135deg, #007bff, #0056b3);
+            color: white;
+        }
+
+        .btn-success {
+            background: linear-gradient(135deg, #28a745, #1e7e34);
+            color: white;
+        }
+
+        .btn-warning {
+            background: linear-gradient(135deg, #ffc107, #e0a800);
+            color: #212529;
+        }
+
+        .btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(0,0,0,0.2);
+        }
+
+        .btn:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+            transform: none;
+        }
+
+        .progress-container {
+            background: #e9ecef;
+            border-radius: 10px;
+            height: 20px;
+            margin: 20px 0;
+            overflow: hidden;
+        }
+
+        .progress-bar {
+            height: 100%;
+            background: linear-gradient(45deg, #007bff, #0056b3);
+            width: 0%;
+            transition: width 0.3s ease;
+            position: relative;
+        }
+
+        .progress-bar::after {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: linear-gradient(
+                45deg,
+                transparent 25%,
+                rgba(255,255,255,0.2) 25%,
+                rgba(255,255,255,0.2) 50%,
+                transparent 50%,
+                transparent 75%,
+                rgba(255,255,255,0.2) 75%
+            );
+            background-size: 20px 20px;
+            animation: progress-stripes 1s linear infinite;
+        }
+
+        @keyframes progress-stripes {
+            0% { background-position: 0 0; }
+            100% { background-position: 20px 0; }
+        }
+
+        .status {
+            text-align: center;
+            margin: 20px 0;
+            font-size: 18px;
+            font-weight: 500;
+        }
+
+        .results-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(350px, 1fr));
+            gap: 20px;
+            margin-top: 30px;
+        }
+
+        .result-card {
+            background: white;
+            border: 1px solid #dee2e6;
+            border-radius: 15px;
+            padding: 25px;
+            box-shadow: 0 5px 15px rgba(0,0,0,0.08);
+            transition: all 0.3s ease;
+            border-left: 5px solid #6c757d;
+        }
+
+        .result-card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 10px 25px rgba(0,0,0,0.15);
+        }
+
+        .result-card.winner {
+            border-left-color: #28a745;
+            background: linear-gradient(135deg, #d4edda, #c3e6cb);
+        }
+
+        .result-card.error {
+            border-left-color: #dc3545;
+            background: linear-gradient(135deg, #f8d7da, #f5c6cb);
+        }
+
+        .result-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: 15px;
+        }
+
+        .result-title {
+            font-size: 1.4em;
+            font-weight: 700;
+            color: #2c3e50;
+        }
+
+        .result-icon {
+            font-size: 2em;
+        }
+
+        .time-display {
+            font-size: 2.5em;
+            font-weight: 700;
+            color: #007bff;
+            margin: 15px 0;
+        }
+
+        .result-details {
+            color: #6c757d;
+            line-height: 1.6;
+        }
+
+        .comparison {
+            background: linear-gradient(135deg, #fff3cd, #ffeaa7);
+            border: 1px solid #ffeaa7;
+            border-radius: 15px;
+            padding: 25px;
+            margin: 30px 0;
+            text-align: center;
+        }
+
+        .winner-text {
+            font-size: 1.8em;
+            font-weight: 700;
+            color: #856404;
+            margin-bottom: 10px;
+        }
+
+        .speedup-text {
+            font-size: 1.4em;
+            color: #856404;
+        }
+
+        .advanced-results {
+            margin-top: 30px;
+        }
+
+        .benchmark-section {
+            background: #f8f9fa;
+            border-radius: 15px;
+            padding: 25px;
+            margin-bottom: 20px;
+        }
+
+        .benchmark-title {
+            font-size: 1.6em;
+            font-weight: 700;
+            color: #2c3e50;
+            margin-bottom: 20px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .metrics-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 15px;
+        }
+
+        .metric-card {
+            background: white;
+            padding: 15px;
+            border-radius: 10px;
+            border-left: 4px solid #007bff;
+        }
+
+        .metric-label {
+            font-size: 0.9em;
+            color: #6c757d;
+            margin-bottom: 5px;
+        }
+
+        .metric-value {
+            font-size: 1.4em;
+            font-weight: 700;
+            color: #2c3e50;
+        }
+
+        .info-panel {
+            background: #e7f3ff;
+            border: 1px solid #b6d7ff;
+            border-radius: 10px;
+            padding: 20px;
+            margin: 20px 0;
+        }
+
+        .info-panel h3 {
+            color: #0066cc;
+            margin-bottom: 10px;
+        }
+
+        .compatibility-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 20px;
+        }
+
+        .compatibility-card {
+            background: white;
+            border-radius: 10px;
+            padding: 20px;
+            border-left: 4px solid #17a2b8;
+        }
+
+        .feature-list {
+            list-style: none;
+            padding: 0;
+        }
+
+        .feature-list li {
+            padding: 5px 0;
+            border-bottom: 1px solid #eee;
+        }
+
+        .feature-list li:last-child {
+            border-bottom: none;
+        }
+
+        .supported {
+            color: #28a745;
+        }
+
+        .not-supported {
+            color: #dc3545;
+        }
+
+        @media (max-width: 768px) {
+            .container {
+                margin: 10px;
+                border-radius: 10px;
+            }
+
+            .header {
+                padding: 20px;
+            }
+
+            .header h1 {
+                font-size: 1.8em;
+            }
+
+            .control-group {
+                flex-direction: column;
+                align-items: stretch;
+            }
+
+            .btn-group {
+                flex-direction: column;
+            }
+
+            .results-grid {
+                grid-template-columns: 1fr;
+            }
+
+            .nav-tabs {
+                flex-direction: column;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>🚀 CUDA-WASM vs WebGPU</h1>
+            <p>Suite completa de benchmarks para computación paralela en el navegador</p>
+        </div>
+
+        <div class="nav-tabs">
+            <button class="nav-tab active" onclick="showTab('basic')">📊 Básicos</button>
+            <button class="nav-tab" onclick="showTab('advanced')">🔬 Avanzados</button>
+            <button class="nav-tab" onclick="showTab('compatibility')">🌐 Compatibilidad</button>
+            <button class="nav-tab" onclick="showTab('analysis')">📈 Análisis</button>
+        </div>
+
+        <!-- Tab 1: Basic Benchmarks -->
+        <div id="basic" class="tab-content active">
+            <div class="benchmark-controls">
+                <h3>🎛️ Configuración de Benchmarks Básicos</h3>
+                <div class="control-group">
+                    <label for="vectorSize">Tamaño del Vector:</label>
+                    <select id="vectorSize">
+                        <option value="1000">1,000 elementos</option>
+                        <option value="10000">10,000 elementos</option>
+                        <option value="100000" selected>100,000 elementos</option>
+                        <option value="1000000">1,000,000 elementos</option>
+                        <option value="10000000">10,000,000 elementos</option>
+                    </select>
+                    
+                    <label for="iterations">Iteraciones:</label>
+                    <input type="number" id="iterations" value="5" min="1" max="100">
+                </div>
+
+                <div class="btn-group">
+                    <button class="btn btn-primary" onclick="runBenchmark()">🏁 Benchmark Completo</button>
+                    <button class="btn btn-success" onclick="runWebGPUOnly()">⚡ Solo WebGPU</button>
+                    <button class="btn btn-warning" onclick="runCudaWasmOnly()">🔥 Solo CUDA-WASM</button>
+                </div>
+            </div>
+
+            <div class="progress-container" style="display: none;">
+                <div id="progressBar" class="progress-bar"></div>
+            </div>
+
+            <div id="status" class="status">Listo para ejecutar benchmarks</div>
+
+            <div class="results-grid">
+                <div id="webgpuResult" class="result-card">
+                    <div class="result-header">
+                        <div class="result-title">⚡ WebGPU</div>
+                        <div class="result-icon">🖥️</div>
+                    </div>
+                    <div id="webgpuTime" class="time-display">-</div>
+                    <div id="webgpuDetails" class="result-details">Esperando resultados...</div>
+                </div>
+
+                <div id="cudawasmResult" class="result-card">
+                    <div class="result-header">
+                        <div class="result-title">🔥 CUDA-WASM</div>
+                        <div class="result-icon">⚙️</div>
+                    </div>
+                    <div id="cudawasmTime" class="time-display">-</div>
+                    <div id="cudawasmDetails" class="result-details">Esperando resultados...</div>
+                </div>
+            </div>
+
+            <div id="comparison" class="comparison" style="display: none;">
+                <div id="winnerText" class="winner-text"></div>
+                <div id="speedupText" class="speedup-text"></div>
+            </div>
+        </div>
+
+        <!-- Tab 2: Advanced Benchmarks -->
+        <div id="advanced" class="tab-content">
+            <div class="benchmark-controls">
+                <h3>🔬 Benchmarks Avanzados</h3>
+                <div class="btn-group">
+                    <button class="btn btn-primary" onclick="runMemoryBandwidth()">🚀 Ancho de Banda</button>
+                    <button class="btn btn-primary" onclick="runImageProcessing()">🖼️ Proc. Imágenes</button>
+                    <button class="btn btn-primary" onclick="runNeuralNetwork()">🧠 Red Neural</button>
+                    <button class="btn btn-primary" onclick="runMonteCarlo()">🎲 Monte Carlo</button>
+                    <button class="btn btn-primary" onclick="runCryptographic()">🔐 Criptografía</button>
+                    <button class="btn btn-primary" onclick="runScalability()">📈 Escalabilidad</button>
+                </div>
+            </div>
+
+            <div id="advancedResults" class="advanced-results">
+                <!-- Los resultados se generarán dinámicamente -->
+            </div>
+        </div>
+
+        <!-- Tab 3: Compatibility -->
+        <div id="compatibility" class="tab-content">
+            <div class="benchmark-controls">
+                <h3>🌐 Pruebas de Compatibilidad</h3>
+                <button class="btn btn-primary" onclick="runCompatibilityTest()">🔍 Verificar Compatibilidad</button>
+            </div>
+
+            <div id="compatibilityResults" class="compatibility-grid">
+                <!-- Los resultados se generarán dinámicamente -->
+            </div>
+        </div>
+
+        <!-- Tab 4: Analysis -->
+        <div id="analysis" class="tab-content">
+            <div class="info-panel">
+                <h3>📊 ¿Qué miden estos benchmarks?</h3>
+                <ul>
+                    <li><strong>Suma de vectores:</strong> Operaciones paralelas básicas, throughput de datos</li>
+                    <li><strong>Multiplicación de matrices:</strong> Operaciones intensivas, eficiencia de memoria</li>
+                    <li><strong>Ancho de banda de memoria:</strong> Velocidad de transferencia de datos</li>
+                    <li><strong>Procesamiento de imágenes:</strong> Aplicaciones de visión por computadora</li>
+                    <li><strong>Redes neuronales:</strong> Inferencia de machine learning</li>
+                    <li><strong>Monte Carlo:</strong> Simulaciones estocásticas</li>
+                    <li><strong>Criptografía:</strong> Operaciones de hash y encriptación</li>
+                </ul>
+            </div>
+
+            <div class="info-panel">
+                <h3>🎯 Casos de uso reales</h3>
+                <ul>
+                    <li><strong>Machine Learning:</strong> Inferencia de modelos en tiempo real</li>
+                    <li><strong>Videojuegos:</strong> Física, efectos de partículas, raytracing</li>
+                    <li><strong>Finanzas:</strong> Simulaciones de riesgo, pricing de derivados</li>
+                    <li><strong>Ciencias:</strong> Simulaciones numéricas, análisis de datos</li>
+                    <li><strong>Multimedia:</strong> Procesamiento de video/audio en tiempo real</li>
+                    <li><strong>Criptografía:</strong> Mining, blockchain, seguridad</li>
+                </ul>
+            </div>
+
+            <div id="analysisCharts">
+                <!-- Gráficos de análisis se generarán aquí -->
+            </div>
+        </div>
+    </div>
+
+    <script type="module">
+        import { WebGPUComputer } from './src/webgpu.js';
+        import { CudaWasmComputer } from './src/cuda-wasm.js';
+        import ExtendedBenchmarks from './src/extended-benchmarks.js';
+
+        // Instanciar computadores
+        const webgpu = new WebGPUComputer();
+        const cudaWasm = new CudaWasmComputer();
+        const extendedBenchmarks = new ExtendedBenchmarks(webgpu, cudaWasm);
+
+        // Hacer disponibles globalmente para los botones
+        window.webgpu = webgpu;
+        window.cudaWasm = cudaWasm;
+        window.extendedBenchmarks = extendedBenchmarks;
+
+        // Funciones de navegación de tabs
+        window.showTab = function(tabName) {
+            // Ocultar todos los tabs
+            document.querySelectorAll('.tab-content').forEach(tab => {
+                tab.classList.remove('active');
+            });
+            document.querySelectorAll('.nav-tab').forEach(tab => {
+                tab.classList.remove('active');
+            });
+
+            // Mostrar el tab seleccionado
+            document.getElementById(tabName).classList.add('active');
+            event.target.classList.add('active');
+        };
+
+        // Funciones de benchmarks básicos
+        window.runBenchmark = async function() {
+            const vectorSize = parseInt(document.getElementById('vectorSize').value);
+            const iterations = parseInt(document.getElementById('iterations').value);
+            
+            // Mostrar progreso
+            document.querySelector('.progress-container').style.display = 'block';
+            document.getElementById('status').textContent = 'Ejecutando benchmarks...';
+            
+            // Generar datos de prueba
+            const a = new Float32Array(vectorSize).fill(1);
+            const b = new Float32Array(vectorSize).fill(2);
+            
+            try {
+                // Ejecutar WebGPU
+                document.getElementById('progressBar').style.width = '25%';
+                const webgpuResult = await webgpu.vectorAdd(a, b, iterations);
+                
+                // Mostrar resultado WebGPU
+                document.getElementById('webgpuTime').textContent = `${webgpuResult.averageTime.toFixed(2)} ms`;
+                document.getElementById('webgpuDetails').innerHTML = 
+                    `Promedio: ${webgpuResult.averageTime.toFixed(2)} ms<br>` +
+                    `Min: ${webgpuResult.minTime.toFixed(2)} ms<br>` +
+                    `Max: ${webgpuResult.maxTime.toFixed(2)} ms`;
+                document.getElementById('webgpuResult').classList.remove('error');
+                
+                document.getElementById('progressBar').style.width = '75%';
+                
+                // Ejecutar CUDA-WASM
+                const cudaResult = await cudaWasm.vectorAdd(a, b, iterations);
+                
+                // Mostrar resultado CUDA-WASM
+                document.getElementById('cudawasmTime').textContent = `${cudaResult.averageTime.toFixed(2)} ms`;
+                document.getElementById('cudawasmDetails').innerHTML = 
+                    `Promedio: ${cudaResult.averageTime.toFixed(2)} ms<br>` +
+                    `Min: ${cudaResult.minTime.toFixed(2)} ms<br>` +
+                    `Max: ${cudaResult.maxTime.toFixed(2)} ms`;
+                document.getElementById('cudawasmResult').classList.remove('error');
+                
+                // Determinar ganador
+                const winner = webgpuResult.averageTime < cudaResult.averageTime ? 'WebGPU' : 'CUDA-WASM';
+                const faster = webgpuResult.averageTime < cudaResult.averageTime ? webgpuResult : cudaResult;
+                const slower = webgpuResult.averageTime < cudaResult.averageTime ? cudaResult : webgpuResult;
+                const speedup = (slower.averageTime / faster.averageTime).toFixed(2);
+                
+                // Mostrar comparación
+                document.getElementById('winnerText').textContent = `🏆 ${winner} es el ganador!`;
+                document.getElementById('speedupText').textContent = `${speedup}x más rápido`;
+                document.getElementById('comparison').style.display = 'block';
+                
+                // Marcar ganador
+                if (winner === 'WebGPU') {
+                    document.getElementById('webgpuResult').classList.add('winner');
+                    document.getElementById('cudawasmResult').classList.remove('winner');
+                } else {
+                    document.getElementById('cudawasmResult').classList.add('winner');
+                    document.getElementById('webgpuResult').classList.remove('winner');
+                }
+                
+                document.getElementById('progressBar').style.width = '100%';
+                document.getElementById('status').textContent = 'Benchmark completado!';
+                
+            } catch (error) {
+                console.error('Error en benchmark:', error);
+                document.getElementById('status').textContent = `Error: ${error.message}`;
+            } finally {
+                setTimeout(() => {
+                    document.querySelector('.progress-container').style.display = 'none';
+                }, 2000);
+            }
+        };
+        
+        window.runWebGPUOnly = async function() {
+            const vectorSize = parseInt(document.getElementById('vectorSize').value);
+            const iterations = parseInt(document.getElementById('iterations').value);
+            
+            document.getElementById('status').textContent = 'Ejecutando solo WebGPU...';
+            
+            const a = new Float32Array(vectorSize).fill(1);
+            const b = new Float32Array(vectorSize).fill(2);
+            
+            try {
+                const result = await webgpu.vectorAdd(a, b, iterations);
+                document.getElementById('webgpuTime').textContent = `${result.averageTime.toFixed(2)} ms`;
+                document.getElementById('webgpuDetails').innerHTML = 
+                    `Promedio: ${result.averageTime.toFixed(2)} ms<br>` +
+                    `Min: ${result.minTime.toFixed(2)} ms<br>` +
+                    `Max: ${result.maxTime.toFixed(2)} ms`;
+                document.getElementById('webgpuResult').classList.add('winner');
+                document.getElementById('status').textContent = 'WebGPU completado!';
+            } catch (error) {
+                document.getElementById('webgpuResult').classList.add('error');
+                document.getElementById('webgpuDetails').textContent = `Error: ${error.message}`;
+                document.getElementById('status').textContent = 'Error en WebGPU';
+            }
+        };
+        
+        window.runCudaWasmOnly = async function() {
+            const vectorSize = parseInt(document.getElementById('vectorSize').value);
+            const iterations = parseInt(document.getElementById('iterations').value);
+            
+            document.getElementById('status').textContent = 'Ejecutando solo CUDA-WASM...';
+            
+            const a = new Float32Array(vectorSize).fill(1);
+            const b = new Float32Array(vectorSize).fill(2);
+            
+            try {
+                const result = await cudaWasm.vectorAdd(a, b, iterations);
+                document.getElementById('cudawasmTime').textContent = `${result.averageTime.toFixed(2)} ms`;
+                document.getElementById('cudawasmDetails').innerHTML = 
+                    `Promedio: ${result.averageTime.toFixed(2)} ms<br>` +
+                    `Min: ${result.minTime.toFixed(2)} ms<br>` +
+                    `Max: ${result.maxTime.toFixed(2)} ms`;
+                document.getElementById('cudawasmResult').classList.add('winner');
+                document.getElementById('status').textContent = 'CUDA-WASM completado!';
+            } catch (error) {
+                document.getElementById('cudawasmResult').classList.add('error');
+                document.getElementById('cudawasmDetails').textContent = `Error: ${error.message}`;
+                document.getElementById('status').textContent = 'Error en CUDA-WASM';
+            }
+        };
+
+        // Funciones de benchmarks avanzados
+        window.runMemoryBandwidth = async function() {
+            const resultsDiv = document.getElementById('advancedResults');
+            resultsDiv.innerHTML = '<div class="status">🚀 Ejecutando test de ancho de banda...</div>';
+            
+            try {
+                const results = await extendedBenchmarks.memoryBandwidthTest();
+                displayAdvancedResults('Memory Bandwidth', results, 'GB/s', resultsDiv);
+            } catch (error) {
+                resultsDiv.innerHTML = `<div class="status">❌ Error: ${error.message}</div>`;
+            }
+        };
+
+        window.runImageProcessing = async function() {
+            const resultsDiv = document.getElementById('advancedResults');
+            resultsDiv.innerHTML = '<div class="status">🖼️ Ejecutando procesamiento de imágenes...</div>';
+            
+            try {
+                const results = await extendedBenchmarks.runImageProcessing();
+                displayAdvancedResults('Image Processing', results, 'pixels/sec', resultsDiv);
+            } catch (error) {
+                resultsDiv.innerHTML = `<div class="status">❌ Error: ${error.message}</div>`;
+            }
+        };
+
+        window.runNeuralNetwork = async function() {
+            const resultsDiv = document.getElementById('advancedResults');
+            resultsDiv.innerHTML = '<div class="status">🧠 Ejecutando inferencia de red neural...</div>';
+            
+            try {
+                const results = await extendedBenchmarks.runNeuralNetwork();
+                displayAdvancedResults('Neural Network', results, 'inferences/sec', resultsDiv);
+            } catch (error) {
+                resultsDiv.innerHTML = `<div class="status">❌ Error: ${error.message}</div>`;
+            }
+        };
+
+        window.runMonteCarlo = async function() {
+            const resultsDiv = document.getElementById('advancedResults');
+            resultsDiv.innerHTML = '<div class="status">🎲 Ejecutando simulación Monte Carlo...</div>';
+            
+            try {
+                const results = await extendedBenchmarks.runMonteCarlo();
+                displayAdvancedResults('Monte Carlo', results, 'samples/sec', resultsDiv);
+            } catch (error) {
+                resultsDiv.innerHTML = `<div class="status">❌ Error: ${error.message}</div>`;
+            }
+        };
+
+        window.runCryptographic = async function() {
+            const resultsDiv = document.getElementById('advancedResults');
+            resultsDiv.innerHTML = '<div class="status">🔐 Ejecutando operaciones criptográficas...</div>';
+            
+            try {
+                const results = await extendedBenchmarks.runCryptographic();
+                displayAdvancedResults('Cryptographic', results, 'hashes/sec', resultsDiv);
+            } catch (error) {
+                resultsDiv.innerHTML = `<div class="status">❌ Error: ${error.message}</div>`;
+            }
+        };
+
+        window.runScalability = async function() {
+            const resultsDiv = document.getElementById('advancedResults');
+            resultsDiv.innerHTML = '<div class="status">📈 Ejecutando test de escalabilidad...</div>';
+            
+            try {
+                const results = await extendedBenchmarks.scalabilityTest();
+                displayScalabilityResults(results, resultsDiv);
+            } catch (error) {
+                resultsDiv.innerHTML = `<div class="status">❌ Error: ${error.message}</div>`;
+            }
+        };
+
+        window.runCompatibilityTest = async function() {
+            const resultsDiv = document.getElementById('compatibilityResults');
+            resultsDiv.innerHTML = '<div class="status">🔍 Verificando compatibilidad...</div>';
+            
+            try {
+                const results = await extendedBenchmarks.compatibilityTest();
+                displayCompatibilityResults(results, resultsDiv);
+            } catch (error) {
+                resultsDiv.innerHTML = `<div class="status">❌ Error: ${error.message}</div>`;
+            }
+        };
+
+        function displayAdvancedResults(testName, results, unit, container) {
+            const html = `
+                <div class="benchmark-section">
+                    <div class="benchmark-title">
+                        📊 ${testName} Results
+                    </div>
+                    <div class="metrics-grid">
+                        ${Object.entries(results).map(([tech, result]) => `
+                            <div class="metric-card ${result.error ? 'error' : ''}">
+                                <div class="metric-label">${tech.toUpperCase()}</div>
+                                <div class="metric-value">
+                                    ${result.error ? '❌ Error' : 
+                                      result.bandwidth ? `${result.bandwidth} ${unit}` :
+                                      result.pixelsPerSecond ? `${result.pixelsPerSecond} ${unit}` :
+                                      result.inferencesPerSecond ? `${result.inferencesPerSecond} ${unit}` :
+                                      result.samplesPerSecond ? `${result.samplesPerSecond} ${unit}` :
+                                      result.hashesPerSecond ? `${result.hashesPerSecond} ${unit}` :
+                                      `${result.time?.toFixed(2) || 'N/A'} ms`}
+                                </div>
+                                ${result.error ? `<div class="metric-label">${result.error}</div>` : ''}
+                            </div>
+                        `).join('')}
+                    </div>
+                </div>
+            `;
+            container.innerHTML = html;
+        }
+
+        function displayScalabilityResults(results, container) {
+            const html = `
+                <div class="benchmark-section">
+                    <div class="benchmark-title">📈 Scalability Results</div>
+                    <div class="metrics-grid">
+                        ${Object.entries(results).map(([size, sizeResults]) => `
+                            <div class="metric-card">
+                                <div class="metric-label">Size: ${size} elementos</div>
+                                <div class="metric-value">
+                                    WebGPU: ${sizeResults.webgpu?.avgTime || 'Error'} ms<br>
+                                    CUDA-WASM: ${sizeResults.cudaWasm?.avgTime || 'Error'} ms
+                                </div>
+                            </div>
+                        `).join('')}
+                    </div>
+                </div>
+            `;
+            container.innerHTML = html;
+        }
+
+        function displayCompatibilityResults(results, container) {
+            const html = `
+                <div class="compatibility-card">
+                    <h4>🌐 Browser Information</h4>
+                    <p><strong>User Agent:</strong> ${results.browser}</p>
+                </div>
+                <div class="compatibility-card">
+                    <h4>⚡ WebGPU Support</h4>
+                    <ul class="feature-list">
+                        <li class="${results.webgpu.supported ? 'supported' : 'not-supported'}">
+                            ${results.webgpu.supported ? '✅' : '❌'} WebGPU Available
+                        </li>
+                        ${results.webgpu.vendor ? `<li>Vendor: ${results.webgpu.vendor}</li>` : ''}
+                        ${results.webgpu.device ? `<li>Device: ${results.webgpu.device}</li>` : ''}
+                        ${results.webgpu.reason ? `<li>Reason: ${results.webgpu.reason}</li>` : ''}
+                    </ul>
+                </div>
+                <div class="compatibility-card">
+                    <h4>🔥 WebAssembly Support</h4>
+                    <ul class="feature-list">
+                        <li class="${results.cudaWasm.supported ? 'supported' : 'not-supported'}">
+                            ${results.cudaWasm.supported ? '✅' : '❌'} WebAssembly Available
+                        </li>
+                        ${results.cudaWasm.features ? Object.entries(results.cudaWasm.features).map(([feature, supported]) => 
+                            `<li class="${supported ? 'supported' : 'not-supported'}">
+                                ${supported ? '✅' : '❌'} ${feature}
+                            </li>`
+                        ).join('') : ''}
+                    </ul>
+                </div>
+            `;
+            container.innerHTML = html;
+        }
+
+        // Verificar soporte inicial
+        document.addEventListener('DOMContentLoaded', function() {
+            console.log('🚀 Benchmark Suite Inicializado');
+            
+            // Verificar WebGPU
+            if (!navigator.gpu) {
+                document.getElementById('webgpuDetails').innerHTML = 
+                    '<div style="color: #dc3545;">⚠️ WebGPU no disponible en este navegador</div>';
+            }
+
+            // Mostrar información del sistema
+            console.log('System Info:', {
+                userAgent: navigator.userAgent,
+                webgpu: !!navigator.gpu,
+                webassembly: typeof WebAssembly !== 'undefined'
+            });
+        });
+    </script>
+</body>
+</html>
